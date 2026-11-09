@@ -75,17 +75,22 @@ jobs:
               --exclude='.venv' \
               "$REPO_PATH/" "$DEPLOY_PATH/"
 
-            # Install dependencies in deployment directory (create local venv expected by systemd unit)
+            # Install dependencies into the venv the systemd unit runs
+            # (oneal-api.service -> $DEPLOY_PATH/venv/bin/...). Until 2026-11-09
+            # this installed into .venv, which the unit never used, and the
+            # check `-x .venv/bin/activate` was always false, so .venv was
+            # recreated on every deploy (issue #2691, same gap as #2690).
             cd "$DEPLOY_PATH"
-            # Ensure virtualenv exists and is healthy
-            if [ ! -x .venv/bin/activate ]; then
-              echo "(Re)creating virtualenv in $DEPLOY_PATH/.venv"
-              rm -rf .venv || true
-              python3 -m venv .venv || python -m venv .venv
+            if [ ! -x venv/bin/python ]; then
+              echo "(Re)creating virtualenv in $DEPLOY_PATH/venv"
+              rm -rf venv || true
+              python3 -m venv venv || python -m venv venv
             fi
-            . .venv/bin/activate
-            pip install --upgrade pip
-            pip install -r requirements.txt
+            venv/bin/pip install --upgrade pip
+            venv/bin/pip install -r requirements.txt
+            venv/bin/pip check || echo "WARN: pip check reported dependency conflicts"
+            # The old, unused .venv only confuses; remove it
+            rm -rf .venv || true
 
             # Set permissions
             chown -R www-data:www-data "$DEPLOY_PATH"
